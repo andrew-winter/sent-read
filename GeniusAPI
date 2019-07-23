@@ -1,0 +1,3 @@
+library(httr)
+# https://api.genius.com/search?q=Kendrick%20Lamar&access_token=123
+# ^ Matthew's json url for looking at artist GETs
