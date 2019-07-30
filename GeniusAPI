@@ -1,3 +1,78 @@
-library(httr)
 # https://api.genius.com/search?q=Kendrick%20Lamar&access_token=123
 # ^ Matthew's json url for looking at artist GETs
+
+scrapes <- c("httr", "geniusr", "purrr", "tidytext", "textdata")
+lapply(scrapes, require, character.only = TRUE)
+baseURL <- "https://api.genius.com/search?q="
+token <- "Z12YlAUALbWknjemUTrwHSnGkbbCpbprSqoVbt7yXhjz0sDX_v3pRnNPTq8k2Ldm"
+afinn <- get_sentiments("afinn")
+
+
+sear1 <- search_song(search_term = "brockhampton")
+toplist <- list()
+# BROCKHAMPTON's top three songs on Genius are from the Saturation trilogy
+for (i in 1:3) {
+  toplist[[i]] <- get_song_meta(sear1$song_id[[i]])$album_id}
+# Turn this into a general function, "put unique album ids in a vector"
+toplist[[4]] <- toplist[[1]]
+toplist[[1]] <- toplist[[3]]
+toplist[[3]] <- toplist[[4]]
+toplist[[4]] <- NULL 
+
+sattri <- lapply(toplist, scrape_tracklist)
+
+sat3 <- list()
+sat2 <- list()
+sat1 <- list()
+for (song in 1:nrow(sattri[[1]])) {
+  sat1[[song]] <- scrape_lyrics_url(sattri[[1]][[song,3]])}
+for (song in 1:nrow(sattri[[2]])) {
+  sat2[[song]] <- scrape_lyrics_url(sattri[[2]][[song,3]])}
+for (song in 1:nrow(sattri[[3]])) {
+  sat3[[song]] <- scrape_lyrics_url(sattri[[3]][[song,3]])}
+
+SatLyrics <- list(sat1, sat2, sat3)
+
+SatTokens <- list()
+for (album in 1:3) {
+  SatTokens[[album]] <- lapply(SatLyrics[[album]], unnest_tokens, word, line)}
+
+afinn_join <- function(song) {song %>% 
+  anti_join(stop_words, by = "word") %>% 
+    inner_join(afinn, by = "word")}
+positive_sent <- function(song) {sum(song$value[song$value > 0])}
+negative_sent <- function(song) {sum(song$value[song$value < 0])}
+
+SatSentiment <- list()
+for (album in 1:3) {
+  SatSentiment[[album]] <- cbind.data.frame(
+    sattri[[album]]$song_title, 
+    sapply(lapply(SatTokens[[album]], afinn_join), positive_sent),
+    sapply(lapply(SatTokens[[album]], afinn_join), negative_sent))
+  names(SatSentiment[[album]]) <- c("song", "pos", "neg")
+}
+SST <- bind_rows(SatSentiment, .id = "album") %>% as_tibble()
+# Important line that makes sure ggplot doesn't screw up the order-------------
+SST$song <- factor(SST$song, levels = unique(as.character(SST$song)))
+SST <- SST %>% mutate(diff = pos + neg)
+
+# Should be able to put default aesthetics/formats in ggplot args, dunno why not
+ggplot(data = SST, aes(x = song)) + 
+  geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.8, 
+    fill = "springgreen") +  
+  geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.8, 
+    fill = "steelblue2") +
+  coord_flip() + labs(title = "SATURATION Trilogy", x = "song",
+    y = "negative sentiment lyrics / positive sentiment lyrics")
+
+
+
+
+
+# Sample building "final" sent analysis--------------------------------------
+Saturation <- cbind.data.frame(sattri[[1]]$song_title,
+  sapply(lapply(SatTokens[[1]], afinn_join), positive_sent),
+  sapply(lapply(SatTokens[[1]], afinn_join), negative_sent))
+names(Saturation) <- c("song","pos","neg")
+Saturation$song <- factor(Saturation$song, levels = 
+  unique(as.character(Saturation$song)))
