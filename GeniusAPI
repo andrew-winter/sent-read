@@ -1,6 +1,3 @@
-# https://api.genius.com/search?q=Kendrick%20Lamar&access_token=123
-# ^ Matthew's json url for looking at artist GETs
-
 scrapes <- c("httr", "geniusr", "purrr", "tidytext", "textdata")
 lapply(scrapes, require, character.only = TRUE)
 baseURL <- "https://api.genius.com/search?q="
@@ -20,7 +17,6 @@ toplist[[3]] <- toplist[[4]]
 toplist[[4]] <- NULL 
 
 sattri <- lapply(toplist, scrape_tracklist)
-
 sat3 <- list()
 sat2 <- list()
 sat1 <- list()
@@ -30,9 +26,7 @@ for (song in 1:nrow(sattri[[2]])) {
   sat2[[song]] <- scrape_lyrics_url(sattri[[2]][[song,3]])}
 for (song in 1:nrow(sattri[[3]])) {
   sat3[[song]] <- scrape_lyrics_url(sattri[[3]][[song,3]])}
-
 SatLyrics <- list(sat1, sat2, sat3)
-
 SatTokens <- list()
 for (album in 1:3) {
   SatTokens[[album]] <- lapply(SatLyrics[[album]], unnest_tokens, word, line)}
@@ -53,26 +47,62 @@ for (album in 1:3) {
 }
 SST <- bind_rows(SatSentiment, .id = "album") %>% as_tibble()
 # Important line that makes sure ggplot doesn't screw up the order-------------
-SST$song <- factor(SST$song, levels = unique(as.character(SST$song)))
-SST <- SST %>% mutate(diff = pos + neg)
+SST$song <- factor(SST$song, levels = unique(as.character(SST$song)) %>% rev)
+SST <- SST %>% mutate(diff = pos - neg)
+
+# Possible problem-- compared the sentiments when using custom 'afinn_join()'
+  # versus just 'inner_join()' with the afinn lexicon. The difference seems to
+  # be whether or not 'anti_join(stop_words)' is used. Looking at just a few
+  # songs, seems to undercount positive lyrics for BROCKHAMPTON and undercount
+  # both positive AND negative lyrics in Hamilton
+# Might be a worthwhile addition to make two additions to plot(s)
+  # line that measures difference between positive and negative sentiment, and
+  # line that measures difference between including stop_words or not
 
 # Should be able to put default aesthetics/formats in ggplot args, dunno why not
+labels <- c("SATURATION", "SATURATION II", "SATURATION III")
+names(labels) <- c("1", "2", "3")
 ggplot(data = SST, aes(x = song)) + 
   geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.8, 
     fill = "springgreen") +  
   geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.8, 
     fill = "steelblue2") +
+  facet_grid(. ~ album, labeller = labeller(album = labels)) +
   coord_flip() + labs(title = "SATURATION Trilogy", x = "song",
-    y = "negative sentiment lyrics / positive sentiment lyrics")
+    y = "sentiment by individual lyrics")
 
 
 
+Hammeta <- search_song(search_term = "Hamilton")$song_id[[1]] %>% get_song_meta()
+HamLyrics <- list()
+HamLyrics <- lapply(scrape_tracklist(Hammeta$album_id)$song_lyrics_url,  
+  scrape_lyrics_url)
+HamTokens <- lapply(HamLyrics, unnest_tokens, word, line)
+HamSent <- list()
+for (song in 1:46) {
+  HamSent[[song]] <- cbind.data.frame(
+    HamTokens[[song]]$song_name[[1]],
+    positive_sent(lapply(HamTokens, inner_join, afinn, by = "word")[[song]]),
+    negative_sent(lapply(HamTokens, inner_join, afinn, by = "word")[[song]])
+  )}
+HamSentiment <- bind_rows(HamSent)
+names(HamSentiment) <- c("song", "pos", "neg")
+HamSentiment
 
+HamSentiment$song <- factor(HamSentiment$song, 
+  levels = unique(as.character(HamSentiment$song)) %>% rev)
+HamSentiment %>% ggplot(aes(x = song)) +
+  geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.8, 
+    fill = "springgreen") +
+  geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.8, 
+    fill = "steelblue2") +
+  coord_flip() + labs(title = "Lyrical Sentiment in Hamilton", x = "song",
+    y = "sentiment by individual lyrics")
 
-# Sample building "final" sent analysis--------------------------------------
-Saturation <- cbind.data.frame(sattri[[1]]$song_title,
-  sapply(lapply(SatTokens[[1]], afinn_join), positive_sent),
-  sapply(lapply(SatTokens[[1]], afinn_join), negative_sent))
-names(Saturation) <- c("song","pos","neg")
-Saturation$song <- factor(Saturation$song, levels = 
-  unique(as.character(Saturation$song)))
+# A few notes:
+  # One album at a time is pretty darn easy, once the kinks are worked out
+  # Can improve the integrity of the visualization by
+    # controlling for the length of the song, 
+    # controlling for RELATIVE sentiment,
+    # comparing between different lexicons,
+    # comparing between different methods (stop_words or not)
