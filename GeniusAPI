@@ -3,19 +3,30 @@ lapply(scrapes, require, character.only = TRUE)
 baseURL <- "https://api.genius.com/search?q="
 token <- "Z12YlAUALbWknjemUTrwHSnGkbbCpbprSqoVbt7yXhjz0sDX_v3pRnNPTq8k2Ldm"
 afinn <- get_sentiments("afinn")
+bing <- get_sentiments("bing")
+loughran <- get_sentiments("loughran")
+afinn_join <- function(song) {song %>% 
+  anti_join(stop_words, by = "word") %>% 
+    inner_join(afinn, by = "word")}
+positive_sent <- function(song) {sum(song$value[song$value > 0])}
+negative_sent <- function(song) {sum(song$value[song$value < 0])}
+bing_positive_sent <- function(song) {
+  song$sentiment[song$sentiment == "positive"] %>% length()}
+bing_negative_sent <- function(song) {
+  song$sentiment[song$sentiment == "negative"] %>% length() *-1} 
 
 
 sear1 <- search_song(search_term = "brockhampton")
 toplist <- list()
 # BROCKHAMPTON's top three songs on Genius are from the Saturation trilogy
 for (i in 1:3) {
-  toplist[[i]] <- get_song_meta(sear1$song_id[[i]])$album_id}
+  toplist[[i]] <- get_song_meta(sear1$song_id[[i]])$album_id
+}
 # Turn this into a general function, "put unique album ids in a vector"
 toplist[[4]] <- toplist[[1]]
 toplist[[1]] <- toplist[[3]]
 toplist[[3]] <- toplist[[4]]
 toplist[[4]] <- NULL 
-
 sattri <- lapply(toplist, scrape_tracklist)
 sat3 <- list()
 sat2 <- list()
@@ -30,13 +41,6 @@ SatLyrics <- list(sat1, sat2, sat3)
 SatTokens <- list()
 for (album in 1:3) {
   SatTokens[[album]] <- lapply(SatLyrics[[album]], unnest_tokens, word, line)}
-
-afinn_join <- function(song) {song %>% 
-  anti_join(stop_words, by = "word") %>% 
-    inner_join(afinn, by = "word")}
-positive_sent <- function(song) {sum(song$value[song$value > 0])}
-negative_sent <- function(song) {sum(song$value[song$value < 0])}
-
 SatSentiment <- list()
 for (album in 1:3) {
   SatSentiment[[album]] <- cbind.data.frame(
@@ -50,6 +54,32 @@ SST <- bind_rows(SatSentiment, .id = "album") %>% as_tibble()
 SST$song <- factor(SST$song, levels = unique(as.character(SST$song)) %>% rev)
 SST <- SST %>% mutate(diff = pos - neg)
 
+# Should be able to put default aesthetics/formats in ggplot args, dunno why not
+labels <- c("SATURATION", "SATURATION II", "SATURATION III")
+names(labels) <- c("1", "2", "3")
+SSTPlot <- ggplot(data = SST, aes(x = song)) + 
+  geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.7, 
+    fill = "springgreen") +  
+  geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.7, 
+    fill = "steelblue2") +
+  facet_grid(. ~ album, labeller = labeller(album = labels)) +
+  coord_flip() + labs(title = "Lyrical Sentiment in the SATURATION Trilogy", 
+    x = "song", y = "sentiment by individual words")
+print(SSTPlot)
+
+order <- c(c(1:17), c(1:16), c(1:15))
+SST_alt <- SST %>% mutate(order = order)
+SSTPlot_alt <- ggplot(SST_alt, aes(x = order)) +
+  geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.7, 
+    fill = "springgreen") +  
+  geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.7, 
+    fill = "steelblue2") +
+  facet_grid(album ~ ., labeller = labeller(album = labels)) +
+  labs(title = "Lyrical Sentiment in the SATURATION Trilogy", 
+    x = "track number", y = "sentiment by individual lyrics")
+print(SSTPlot_alt)
+
+
 # Possible problem-- compared the sentiments when using custom 'afinn_join()'
   # versus just 'inner_join()' with the afinn lexicon. The difference seems to
   # be whether or not 'anti_join(stop_words)' is used. Looking at just a few
@@ -59,18 +89,13 @@ SST <- SST %>% mutate(diff = pos - neg)
   # line that measures difference between positive and negative sentiment, and
   # line that measures difference between including stop_words or not
 
-# Should be able to put default aesthetics/formats in ggplot args, dunno why not
-labels <- c("SATURATION", "SATURATION II", "SATURATION III")
-names(labels) <- c("1", "2", "3")
-ggplot(data = SST, aes(x = song)) + 
-  geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.8, 
-    fill = "springgreen") +  
-  geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.8, 
-    fill = "steelblue2") +
-  facet_grid(. ~ album, labeller = labeller(album = labels)) +
-  coord_flip() + labs(title = "SATURATION Trilogy", x = "song",
-    y = "sentiment by individual lyrics")
-
+# A few notes:
+  # One album at a time is pretty darn easy, once the kinks are worked out
+  # Can improve the integrity of the visualization by
+    # controlling for the length of the song, 
+    # controlling for RELATIVE sentiment,
+    # comparing between different lexicons,
+    # comparing between different methods (stop_words or not)
 
 
 Hammeta <- search_song(search_term = "Hamilton")$song_id[[1]] %>% get_song_meta()
@@ -91,18 +116,106 @@ HamSentiment
 
 HamSentiment$song <- factor(HamSentiment$song, 
   levels = unique(as.character(HamSentiment$song)) %>% rev)
-HamSentiment %>% ggplot(aes(x = song)) +
-  geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.8, 
-    fill = "springgreen") +
-  geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.8, 
-    fill = "steelblue2") +
+HamPlot <- ggplot(HamSentiment, aes(x = song)) +
+  geom_col(aes(y = pos), linetype = 1, color = "black", alpha = 0.6, 
+    fill = "sienna1") +
+  geom_col(aes(y = neg), linetype = 1, color = "black", alpha = 0.6, 
+    fill = "skyblue2") +
   coord_flip() + labs(title = "Lyrical Sentiment in Hamilton", x = "song",
-    y = "sentiment by individual lyrics")
+    y = "sentiment by individual words")
+print(HamPlot)
 
-# A few notes:
-  # One album at a time is pretty darn easy, once the kinks are worked out
-  # Can improve the integrity of the visualization by
-    # controlling for the length of the song, 
-    # controlling for RELATIVE sentiment,
-    # comparing between different lexicons,
-    # comparing between different methods (stop_words or not)
+HamSentiment_alt <- HamSentiment %>% 
+  mutate(normal_pos = abs((pos - mean(HamSentiment$pos))/46), 
+    normal_neg = -1 * abs((neg - mean(HamSentiment$neg))/46))
+HamPlot_alt <- HamSentiment_alt %>% ggplot(aes(x = song)) + 
+  geom_col(aes(y = normal_pos), linetype = 1, color = "black", alpha = 0.6, 
+    fill = "sienna1") +
+  geom_col(aes(y = normal_neg), linetype = 1, color = "black", alpha = 0.6, 
+    fill = "skyblue2") + coord_flip() + 
+  labs(title = "Normalized Sentiment in Hamilton", x = "song", 
+    y = "sentiment by individual words")
+print(HamPlot_alt)
+
+
+
+# Rough-and-tumble, quick sentiment function-------------------------------------
+quick_lyric_sentiment <- function(search) {
+# Assuming the first result of the search is the album you're looking for...
+  Meta <- search_song(search)$song_id[[1]] %>% get_song_meta()
+  Lyrics <- list()
+  Lyrics <- lapply(scrape_tracklist(Meta$album_id)$song_lyrics_url,
+    scrape_lyrics_url)
+  Tokens <- lapply(Lyrics, unnest_tokens, word, line)
+  Sent <- list()
+  for (song in 1:length(Lyrics)) {
+    Sent[[song]] <- cbind.data.frame(
+      Tokens[[song]]$song_name[[1]],
+      positive_sent(lapply(Tokens, inner_join, afinn, by = "word")[[song]]),
+      negative_sent(lapply(Tokens, inner_join, afinn, by = "word")[[song]])
+    )}
+  Sentiment <- bind_rows(Sent)
+  names(Sentiment) <- c("song", "pos", "neg")
+  Sentiment$song <- factor(Sentiment$song, 
+    levels = unique(as.character(Sentiment$song)) %>% rev)
+return(Sentiment)
+}
+
+
+BeatlesAlbums <- read.csv("BeatlesAlbums.csv", stringsAsFactors = FALSE) %>% 
+  as_tibble()
+# Wrote ugly code to get these album_ids; easier to preserve them then the code
+BeatlesAlbum_ids <- c(27343, 29389, 27184, 21431, 22530, 12347, 17342, 11039, 
+  12416, 16366, 29391, 12411, 29393)
+BeatlesTracklists <- lapply(BeatlesAlbum_ids, scrape_tracklist)
+BeatlesLyrics <- list()
+for (album in 1:13) {
+  BeatlesLyrics[[album]] <- lapply(BeatlesTracklists[[album]]$song_lyrics_url, 
+    scrape_lyrics_url)}
+BeatlesTokens <- list()
+for (album in 1:13) {
+  BeatlesTokens[[album]] <- lapply(BeatlesLyrics[[album]], 
+    unnest_tokens, word, line)}
+
+BeatlesSentA <- list() # afinn_join()
+BeatlesSentB <- list() # inner_join(bing)
+BeatlesSentC <- list() # inner_join(afinn)
+for (album in 1:13) {
+  BeatlesSentA[[album]] <- cbind.data.frame(
+    BeatlesTracklists[[album]]$song_title,
+    lapply(BeatlesTokens[[album]], afinn_join) %>% sapply(positive_sent),
+    lapply(BeatlesTokens[[album]], afinn_join) %>% sapply(negative_sent)
+    )
+  BeatlesSentB[[album]] <- cbind.data.frame(
+    BeatlesTracklists[[album]]$song_title,
+    lapply(BeatlesTokens[[album]], inner_join, bing, "word") %>%
+      sapply(bing_positive_sent),
+    lapply(BeatlesTokens[[album]], inner_join, bing, "word") %>%
+      sapply(bing_negative_sent)
+    )
+  BeatlesSentC[[album]] <- cbind.data.frame(
+    BeatlesTracklists[[album]]$song_title,
+    lapply(BeatlesTokens[[album]], inner_join, afinn, "word") %>%
+      sapply(positive_sent),
+    lapply(BeatlesTokens[[album]], inner_join, afinn, "word") %>%
+      sapply(negative_sent)
+    )
+  names(BeatlesSentA[[album]]) <- c("song", "pos", "neg")
+  names(BeatlesSentB[[album]]) <- c("song", "pos", "neg")
+  names(BeatlesSentC[[album]]) <- c("song", "pos", "neg")
+}
+
+A <- bind_rows(BeatlesSentA, .id = "album") %>% as_tibble()
+B <- bind_rows(BeatlesSentB, .id = "album") %>% as_tibble()
+C <- bind_rows(BeatlesSentC, .id = "album") %>% as_tibble()
+
+BeatlesSimple <- bind_rows(A,B,C, .id = "method")
+
+
+ggplot(BeatlesSimple, aes(x = song)) + 
+  geom_col(aes(y = pos), linetype = 1, color = "black", 
+    alpha = 0.6, fill = "gold") +
+  geom_col(aes(y = neg), linetype = 1, color = "black",
+    alpha = 0.6, fill = "firebrick1") +
+  coord_flip() + facet_wrap(~ method) + labs(title = "Lyrical Sentiment in The
+    Beatles' Studio Albums", y = "sentiment by individual lyrics")
