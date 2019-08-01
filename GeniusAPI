@@ -208,14 +208,33 @@ for (album in 1:13) {
 A <- bind_rows(BeatlesSentA, .id = "album") %>% as_tibble()
 B <- bind_rows(BeatlesSentB, .id = "album") %>% as_tibble()
 C <- bind_rows(BeatlesSentC, .id = "album") %>% as_tibble()
-
 BeatlesSimple <- bind_rows(A,B,C, .id = "method")
 
+A_norm <- mutate(A, pos = abs((pos - mean(pos))/sd(pos)),
+                    neg = -1 * abs((neg - mean(neg))/sd(neg)))
+B_norm <- mutate(B, pos = abs((pos - mean(pos))/sd(pos)),
+                    neg = -1 * abs((neg - mean(neg))/sd(neg)))
+C_norm <- mutate(C, pos = abs((pos - mean(pos))/sd(pos)),
+                    neg = -1 * abs((neg - mean(neg))/sd(neg)))
+BeatlesNorm <- bind_rows(A_norm, B_norm, C_norm, .id = "method")
 
-ggplot(BeatlesSimple, aes(x = song)) + 
-  geom_col(aes(y = pos), linetype = 1, color = "black", 
-    alpha = 0.6, fill = "gold") +
-  geom_col(aes(y = neg), linetype = 1, color = "black",
-    alpha = 0.6, fill = "firebrick1") +
-  coord_flip() + facet_wrap(~ method) + labs(title = "Lyrical Sentiment in The
-    Beatles' Studio Albums", y = "sentiment by individual lyrics")
+# Set to factors for ordering in ggplot
+# Duplicate songs: "Yellow Submarine" and "All You Need Is Love"
+A_norm$song[[152]] <- "yellow submarine"
+A_norm$song[[157]] <- "all you need is love"
+A_norm$song <- factor(A_norm$song, levels = unique(as.character(A_norm$song)))
+A_norm$album <- factor(A_norm$album, levels = unique(as.character(A_norm$album)))
+
+BeatlesPlotA <- ggplot(A_norm, aes(x = song), linetype = 1) + 
+  geom_col(aes(y = pos, fill = album), color = "black", alpha = 0.6) +
+  geom_col(aes(y = neg, fill = album), color = "black", alpha = 0.6) +
+  labs(title = "Normalized Lyric Sentiment in The Beatles' Studio Albums", 
+    y = "sentiment by individual lyrics") +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "none")
+# Things to add:
+  # Good way of adding text annotations to label individual albums
+  # Little notes at the high points and end points (ex. "She's So Heavy")
+  # Control for song length or number of words in the songs
