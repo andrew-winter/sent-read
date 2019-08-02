@@ -13,7 +13,8 @@ negative_sent <- function(song) {sum(song$value[song$value < 0])}
 bing_positive_sent <- function(song) {
   song$sentiment[song$sentiment == "positive"] %>% length()}
 bing_negative_sent <- function(song) {
-  song$sentiment[song$sentiment == "negative"] %>% length() *-1} 
+  song$sentiment[song$sentiment == "negative"] %>% length() *-1}
+song_length <- function(song) {song %>% bind_rows %>% nrow}
 
 
 sear1 <- search_song(search_term = "brockhampton")
@@ -184,57 +185,85 @@ for (album in 1:13) {
   BeatlesSentA[[album]] <- cbind.data.frame(
     BeatlesTracklists[[album]]$song_title,
     lapply(BeatlesTokens[[album]], afinn_join) %>% sapply(positive_sent),
-    lapply(BeatlesTokens[[album]], afinn_join) %>% sapply(negative_sent)
+    lapply(BeatlesTokens[[album]], afinn_join) %>% sapply(negative_sent),
+    sapply(BeatlesTokens[[album]], song_length)
     )
   BeatlesSentB[[album]] <- cbind.data.frame(
     BeatlesTracklists[[album]]$song_title,
     lapply(BeatlesTokens[[album]], inner_join, bing, "word") %>%
       sapply(bing_positive_sent),
     lapply(BeatlesTokens[[album]], inner_join, bing, "word") %>%
-      sapply(bing_negative_sent)
+      sapply(bing_negative_sent),
+    sapply(BeatlesTokens[[album]], song_length)
     )
   BeatlesSentC[[album]] <- cbind.data.frame(
     BeatlesTracklists[[album]]$song_title,
     lapply(BeatlesTokens[[album]], inner_join, afinn, "word") %>%
       sapply(positive_sent),
     lapply(BeatlesTokens[[album]], inner_join, afinn, "word") %>%
-      sapply(negative_sent)
+      sapply(negative_sent),
+    sapply(BeatlesTokens[[album]], song_length)
     )
-  names(BeatlesSentA[[album]]) <- c("song", "pos", "neg")
-  names(BeatlesSentB[[album]]) <- c("song", "pos", "neg")
-  names(BeatlesSentC[[album]]) <- c("song", "pos", "neg")
+  names(BeatlesSentA[[album]]) <- c("song", "pos", "neg", "wlength")
+  names(BeatlesSentB[[album]]) <- c("song", "pos", "neg", "wlength")
+  names(BeatlesSentC[[album]]) <- c("song", "pos", "neg", "wlength")
 }
 
-A <- bind_rows(BeatlesSentA, .id = "album") %>% as_tibble()
 B <- bind_rows(BeatlesSentB, .id = "album") %>% as_tibble()
 C <- bind_rows(BeatlesSentC, .id = "album") %>% as_tibble()
-BeatlesSimple <- bind_rows(A,B,C, .id = "method")
 
-A_norm <- mutate(A, pos = abs((pos - mean(pos))/sd(pos)),
-                    neg = -1 * abs((neg - mean(neg))/sd(neg)))
-B_norm <- mutate(B, pos = abs((pos - mean(pos))/sd(pos)),
-                    neg = -1 * abs((neg - mean(neg))/sd(neg)))
-C_norm <- mutate(C, pos = abs((pos - mean(pos))/sd(pos)),
-                    neg = -1 * abs((neg - mean(neg))/sd(neg)))
-BeatlesNorm <- bind_rows(A_norm, B_norm, C_norm, .id = "method")
+A <- bind_rows(BeatlesSentA, .id = "album") %>% as_tibble()
+A <- A %>% mutate(dif = pos + neg)
+BeatlesSimple <- bind_rows(A,B,C, .id = "method")
 
 # Set to factors for ordering in ggplot
 # Duplicate songs: "Yellow Submarine" and "All You Need Is Love"
-A_norm$song[[152]] <- "yellow submarine"
-A_norm$song[[157]] <- "all you need is love"
-A_norm$song <- factor(A_norm$song, levels = unique(as.character(A_norm$song)))
-A_norm$album <- factor(A_norm$album, levels = unique(as.character(A_norm$album)))
+A$song[[152]] <- "yellow submarine"
+A$song[[157]] <- "all you need is love"
+A$song <- factor(A$song, levels = unique(as.character(A$song)))
+A$album <- factor(A$album, levels = unique(as.character(A$album)))
 
-BeatlesPlotA <- ggplot(A_norm, aes(x = song), linetype = 1) + 
+A2 <- A %>% mutate(pos2 = 
+  abs( pos * (wlength-mean(wlength)/sd(wlength)) ), neg2 =
+  -1 * abs( neg * (wlength-mean(wlength)/sd(wlength)) ) )
+
+A3 <- A %>% mutate(pos3 = pos/wlength, neg3 = neg/wlength)
+
+
+BeatlesPlotA <- ggplot(A, aes(x = song), linetype = 1) + 
   geom_col(aes(y = pos, fill = album), color = "black", alpha = 0.6) +
-  geom_col(aes(y = neg, fill = album), color = "black", alpha = 0.6) +
-  labs(title = "Normalized Lyric Sentiment in The Beatles' Studio Albums", 
-    y = "sentiment by individual lyrics") +
+  geom_col(aes(y = neg), color = "black", alpha = 0.4) +
   theme(axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
-        legend.position = "none")
-# Things to add:
-  # Good way of adding text annotations to label individual albums
-  # Little notes at the high points and end points (ex. "She's So Heavy")
-  # Control for song length or number of words in the songs
+        legend.position = "none") +
+  labs(title = "Half of What I Say is Meaningless", 
+       subtitle = "Sentiment Analysis of The Beatles' Lyrics",
+       y = "negativity / positivity")
+
+BeatlesPlotA3 <- ggplot(A3, aes(x = song), linetype = 1) + 
+  geom_col(aes(y = pos3, fill = album), color = "black", alpha = 0.6) +
+  geom_col(aes(y = neg3), color = "black", alpha = 0.4) +
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "none") +
+  labs(title = "Half of What I Say is Meaningless", 
+       subtitle = "Sentiment Analysis of The Beatles' Lyrics",
+       y = "negativity / positivity")
+print(BeatlesPlotA3)
+
+BeatlesPlotA +
+  annotate(geom = "text", x = 121, y = -30, angle = 90, size = 4,
+    label = "All You Need Is Love") +
+  annotate(geom = "text", x = 170, y = 40, angle = 90, size = 4,
+    label = "I Want You (She's So Heavy)") +
+  annotate(geom = "text", x = 160, y = -30, angle = 90, size = 3,
+    label = "George Martin's songs on Yellow Submarine")
+
+
+print(BeatlesPlotA)
+
+BeatlesLength <- ggplot(A, aes(x = album, y = wlength)) + geom_boxplot() +
+  scale_x_discrete(labels = BeatlesAlbums$Title)
+print(BeatlesLength)
