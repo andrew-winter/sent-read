@@ -1,0 +1,12 @@
+Intro <- 29884 ; AWG <- 150853 ; Big <- 446915 ; Chance_tracks <- c(Intro, AWG, Big)
+bing <- get_sentiments("bing")
+bing_positive_sent <- function(song) {
+  song$sentiment[song$sentiment == "positive"] %>% length()}
+bing_negative_sent <- function(song) {
+  song$sentiment[song$sentiment == "negative"] %>% length() *-1}
+Chance_list <- lapply(Chance_tracks, scrape_tracklist)
+Chance_lyrics <- lapply(c(1:3), function(x) { Chance_list[[x]]$song_lyrics_url %>% 
+    lapply(scrape_lyrics_url)})
+Chance_tokens <- lapply(c(1:3), function(y) { Chance_lyrics[[y]] %>% 
+    lapply(unnest_tokens, word, line) })
+inner_join(bing
