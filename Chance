@@ -1,12 +1,203 @@
-Intro <- 29884 ; AWG <- 150853 ; Big <- 446915 ; Chance_tracks <- c(Intro, AWG, Big)
+scrapes <- c("httr", "geniusr", "tidytext", "textdata")
+lapply(scrapes, require, character.only = TRUE)
+token <- "Z12YlAUALbWknjemUTrwHSnGkbbCpbprSqoVbt7yXhjz0sDX_v3pRnNPTq8k2Ldm"
 bing <- get_sentiments("bing")
 bing_positive_sent <- function(song) {
   song$sentiment[song$sentiment == "positive"] %>% length()}
 bing_negative_sent <- function(song) {
   song$sentiment[song$sentiment == "negative"] %>% length() *-1}
+song_length <- function(song) {song %>% bind_rows %>% nrow}
+Intro <- 29884 ; AWG <- 150853 ; Big <- 446915
+Chance_tracks <- c(Intro, AWG, Big)
+
+
 Chance_list <- lapply(Chance_tracks, scrape_tracklist)
-Chance_lyrics <- lapply(c(1:3), function(x) { Chance_list[[x]]$song_lyrics_url %>% 
-    lapply(scrape_lyrics_url)})
-Chance_tokens <- lapply(c(1:3), function(y) { Chance_lyrics[[y]] %>% 
-    lapply(unnest_tokens, word, line) })
-inner_join(bing
+Chance_lyrics <- lapply(c(1:3), function(x) { 
+  Chance_list[[x]]$song_lyrics_url %>% lapply(scrape_lyrics_url)})
+Chance_tokens <- lapply(c(1:3), function(y) { 
+  Chance_lyrics[[y]] %>% lapply(unnest_tokens, word, line) })
+
+Chance_sent <- lapply(c(1:3), function(z) {
+  lapply(Chance_tokens[[z]], inner_join, bing, "word") })
+
+Chance_counts <- lapply(c(1:3), function(q) {
+  cbind.data.frame(Chance_list[[q]]$song_title,
+    sapply(Chance_sent[[q]], bing_positive_sent),
+    sapply(Chance_sent[[q]], bing_negative_sent),
+    sapply(Chance_sent[[q]], song_length),
+    sapply(Chance_tokens[[q]], song_length))
+} )
+names(Chance_counts[[1]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Chance_counts[[2]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Chance_counts[[3]]) <- c("song", "pos", "neg", "slength", "tlength")
+
+
+
+
+simpleChance <- bind_rows(Chance_counts, .id = "album") %>% as_tibble() %>%
+  mutate(dif = pos + neg)
+simpleChancesummary <- simpleChance %>% group_by(album) %>% 
+  summarize(Pos = mean(pos), SD_Pos = sd(pos), 
+            Neg = mean(neg), SD_Neg = sd(neg),
+            Dif = mean(dif), SD_Dif = sd(dif),
+    mean(slength), sd(slength))
+
+simpleChance$song <- factor(simpleChance$song, levels = 
+  unique(as.character(simpleChance$song)))
+simpleChance$album <- factor(simpleChance$album, levels = 
+  unique(as.character(simpleChance$album)))
+Chance_plot <- simpleChance %>% ggplot(aes(x = song)) +
+  geom_col(aes(y = pos, fill = album), alpha = 0.6, color = "black") +
+  geom_col(aes(y = neg), alpha = 0.6, color = "black") +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(), legend.position = "none")
+
+# Dif instead of positive and negative
+simpleChance %>% ggplot(aes(x = song)) + geom_col(aes(y = dif, fill = album), 
+  alpha = 0.6, color = "black") +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(), legend.position = "none")
+
+
+
+Gambino_tracks <- c(11571, 47467, 156650)
+Gambino_list <- lapply(Gambino_tracks, scrape_tracklist)
+Gambino_lyrics <- lapply(c(1:3), function(x) { 
+  Gambino_list[[x]]$song_lyrics_url %>% lapply(scrape_lyrics_url)})
+Gambino_tokens <- lapply(c(1:3), function(y) { 
+  Gambino_lyrics[[y]] %>% lapply(unnest_tokens, word, line) })
+
+Gambino_sent <- lapply(c(1:3), function(z) {
+  lapply(Gambino_tokens[[z]], inner_join, bing, "word") })
+
+Gambino_counts <- lapply(c(1:3), function(q) {
+  cbind.data.frame(Gambino_list[[q]]$song_title,
+    sapply(Gambino_sent[[q]], bing_positive_sent),
+    sapply(Gambino_sent[[q]], bing_negative_sent),
+    sapply(Gambino_sent[[q]], song_length),
+    sapply(Gambino_tokens[[q]], song_length))
+} )
+names(Gambino_counts[[1]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Gambino_counts[[2]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Gambino_counts[[3]]) <- c("song", "pos", "neg", "slength", "tlength")
+
+simpleGambino <- bind_rows(Gambino_counts, .id = "album") %>% as_tibble() %>%
+  mutate(dif = pos + neg)
+simpleGambinosummary <- simpleGambino %>% group_by(album) %>% 
+  summarize(Pos = mean(pos), SD_Pos = sd(pos), 
+            Neg = mean(neg), SD_Neg = sd(neg),
+            Dif = mean(dif), SD_Dif = sd(dif),
+    mean(slength), sd(slength))
+
+simpleGambino$song <- factor(simpleGambino$song, levels = 
+  unique(as.character(simpleGambino$song)))
+simpleGambino$album <- factor(simpleGambino$album, levels = 
+  unique(as.character(simpleGambino$album)))
+Gambino_plot <- simpleGambino %>% ggplot(aes(x = song)) +
+  geom_col(aes(y = pos, fill = album), alpha = 0.6, color = "black") +
+  geom_col(aes(y = neg), alpha = 0.6, color = "black") +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(), legend.position = "none")
+
+
+Tyler_tracks <- c(10761, 10762, 18842, 352640, 526062)
+Tyler_list <- lapply(Tyler_tracks, scrape_tracklist)
+
+Tyler_lyrics <- lapply(c(1:5), function(x) { 
+  Tyler_list[[x]]$song_lyrics_url %>% lapply(scrape_lyrics_url)})
+Tyler_tokens <- lapply(c(1:5), function(y) { 
+  Tyler_lyrics[[y]] %>% lapply(unnest_tokens, word, line) })
+
+Tyler_sent <- lapply(c(1:5), function(z) {
+  lapply(Tyler_tokens[[z]], inner_join, bing, "word") })
+
+Tyler_counts <- lapply(c(1:5), function(q) {
+  cbind.data.frame(Tyler_list[[q]]$song_title,
+    sapply(Tyler_sent[[q]], bing_positive_sent),
+    sapply(Tyler_sent[[q]], bing_negative_sent),
+    sapply(Tyler_sent[[q]], song_length),
+    sapply(Tyler_tokens[[q]], song_length))
+} )
+names(Tyler_counts[[1]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Tyler_counts[[2]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Tyler_counts[[3]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Tyler_counts[[4]]) <- c("song", "pos", "neg", "slength", "tlength")
+names(Tyler_counts[[5]]) <- c("song", "pos", "neg", "slength", "tlength")
+
+simpleTyler <- bind_rows(Tyler_counts, .id = "album") %>% as_tibble() %>%
+  mutate(dif = pos + neg)
+simpleTylersummary <- simpleTyler %>% group_by(album) %>% 
+  summarize(Pos = mean(pos), SD_Pos = sd(pos), 
+            Neg = mean(neg), SD_Neg = sd(neg),
+            Dif = mean(dif), SD_Dif = sd(dif),
+    mean(slength), sd(slength))
+
+simpleTyler$song <- factor(simpleTyler$song, levels = 
+  unique(as.character(simpleTyler$song)))
+simpleTyler$album <- factor(simpleTyler$album, levels = 
+  unique(as.character(simpleTyler$album)))
+Tyler_plot <- simpleTyler %>% ggplot(aes(x = song)) +
+  geom_col(aes(y = pos, fill = album), alpha = 0.6, color = "black") +
+  geom_col(aes(y = neg), alpha = 0.6, color = "black") +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(), legend.position = "none")
+
+simple <- bind_rows(simpleGambinosummary, simpleTylersummary, 
+  simpleChancesummary, .id = "artist")
+simple$artist <- factor(simple$artist, 
+  levels = unique(as.character(simple$artist)))
+levels(simple$artist) <- c("Gambino", "Tyler", "Chance")
+simple %>% ggplot(aes(x = album)) + 
+  geom_col(aes(y = Pos, fill = artist), color = "black", alpha = 0.8) + 
+  geom_col(aes(y = Neg), color = "black", alpha = 0.4) +
+  facet_grid(~artist) + theme(legend.position = "none")
+
+A$song <- factor(A$song, levels = unique(as.character(A$song)))
+
+
+
+# Possible differences-- less contrast between "up" songs and "down" songs
+# Data to back it up:
+  # Standard deviation of positivity and negativity in 
+  # "The Big Day" is far lower than the previous two projects
+
+# This code shows that 'like' is the single largest world that influences
+  # sentiment. Can probably use this as a before-method visualization, something
+  # like "Look at how big of an influence 'like' has, what happens to sentiment
+  # when we remove it or remove it from certain albums"
+bing_words <- bind_rows(Chance_tokens[[1]], Chance_tokens[[2]],
+  Chance_tokens[[3]], .id = "album") %>% inner_join(bing, "word") %>%
+  count(word, sentiment, sort = TRUE)
+bing_words %>% group_by(sentiment) %>% top_n(10) %>% ungroup() %>%
+  mutate(word = reorder(word, n)) %>% ggplot(aes(word, n, fill = sentiment)) +
+    geom_col(show.legend = FALSE) + facet_wrap(~ sentiment, scales = "free_y") +
+    labs(y = "Contribution to sentiment", x = NULL) + coord_flip()
+
+
+# This code does the same as the previous block, but separates between albums
+  # (might be worthwhile to change this around and use 'facet_grid()' that uses
+    # sentiment AND album)
+  # Shows that 'like' is very prevalent in "The Big Day", 'love' is very
+  # prevalent in "The Big Day" and "Acid Rap" but not "Coloring Book", and oddly
+  # enough, 'die' is ONLY seen in "The Big Day", somehow
+bing_words_album <- list(bind_rows(Chance_tokens[[1]]), 
+  bind_rows(Chance_tokens[[2]]), bind_rows(Chance_tokens[[3]]))
+bing_words_album_join <- lapply(c(1:3), function(e) {
+  bing_words_album[[e]] %>% inner_join(bing, "word") %>%
+    count(word, sentiment, sort = TRUE) } )
+bind_rows(bing_words_album_join, .id = "album") %>%
+  group_by(album, sentiment) %>% top_n(10) %>% ungroup() %>% 
+    mutate(word = reorder(word, n)) %>% 
+  ggplot(aes(word, n, fill = album)) + geom_col(show.legend = FALSE) +
+    facet_grid(~ sentiment, scales = "free_y") + coord_flip() +
+    labs(y = "Contribution to sentiment", x = NULL)
+
+
+# per album, per song, what are the most common sentiment words?
+Chance_words <- lapply(c(1:3), function(album) {
+  lapply(c(1:length(Chance_sent[[album]])), function(a) {
+    Chance_sent[[album]][[a]] %>% group_by(word) %>% summarize(n = n()) %>%
+      arrange(desc(n)) } )
+} )
+
+
