@@ -152,8 +152,18 @@ simple %>% ggplot(aes(x = album)) +
   geom_col(aes(y = Neg), color = "black", alpha = 0.4) +
   facet_grid(~artist) + theme(legend.position = "none")
 
-A$song <- factor(A$song, levels = unique(as.character(A$song)))
-
+simple <- lapply(list(Gambino_counts, Tyler_counts, Chance_counts), 
+  bind_rows, .id = "album") %>% bind_rows(.id = "artist") %>% as_tibble() %>%
+  mutate(dif = pos + neg)
+simple$artist <- factor(simple$artist, 
+  levels = unique(as.character(simple$artist)))
+levels(simple$artist) <- c("Gambino", "Tyler", "Chance")
+simple %>% ggplot(aes(x = song)) + 
+  geom_col(aes(y = pos, fill = artist), color = "black", alpha = 0.8) + 
+  geom_col(aes(y = neg), color = "black", alpha = 0.4) +
+  facet_grid(~artist) + theme(legend.position = "none", 
+    axis.title.x = element_blank(), axis.text.x = element_blank(),
+    axis.ticks.x = element_blank())
 
 
 # Possible differences-- less contrast between "up" songs and "down" songs
