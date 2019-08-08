@@ -17,9 +17,39 @@ Chance_lyrics <- lapply(c(1:3), function(x) {
 Chance_tokens <- lapply(c(1:3), function(y) { 
   Chance_lyrics[[y]] %>% lapply(unnest_tokens, word, line) })
 
+Chance_bing_words <- lapply(c(1:3), function(b) {
+  bind_rows(Chance_tokens[[b]]) } ) %>% lapply(inner_join, bing, "word")
+Chance_bing_counts <- lapply(c(1:3), function(c) {
+  count(Chance_bing_words[[c]], word, sentiment, sort = TRUE) } )
+
+# Visualization that shows which words have a big influence, per album
+bind_rows(Chance_bing_counts, .id = "album") %>%
+  group_by(album, sentiment) %>% top_n(10) %>% ungroup() %>% 
+    mutate(word = reorder(word, n)) %>% 
+  ggplot(aes(word, n, fill = album)) + geom_col(show.legend = FALSE) +
+    facet_wrap(~ sentiment, scales = "free_y") + coord_flip() +
+    labs(y = "Contribution to sentiment", x = NULL)
+
+# Shouldn't have to add functionality for multiple albums, as I can just use
+  # something like 
+  # lapply(c(1:2), function(x) { line_detect(Chance_lyrics, x, "search") } )
+
+line_detect <- function(x, y, z) {
+  lapply(c(1:length(x[[y]])), function(a) {
+    filter(x[[y]][[a]], str_detect(line, z)) %>% select(song_name, line)} ) %>%
+  bind_rows
+}
+
+
+lapply(c(1:3), function(y){ filter(Chance_lyrics[[3]][[y]],
+  str_detect(line, "like")) %>% select(song_name, line) } )
+
+filter(Chance_lyrics[[3]][[3]], str_detect(line, "like")) %>% select(song_name,
+  line)
+
+
 Chance_sent <- lapply(c(1:3), function(z) {
   lapply(Chance_tokens[[z]], inner_join, bing, "word") })
-
 Chance_counts <- lapply(c(1:3), function(q) {
   cbind.data.frame(Chance_list[[q]]$song_title,
     sapply(Chance_sent[[q]], bing_positive_sent),
@@ -31,11 +61,9 @@ names(Chance_counts[[1]]) <- c("song", "pos", "neg", "slength", "tlength")
 names(Chance_counts[[2]]) <- c("song", "pos", "neg", "slength", "tlength")
 names(Chance_counts[[3]]) <- c("song", "pos", "neg", "slength", "tlength")
 
-
-
-
 simpleChance <- bind_rows(Chance_counts, .id = "album") %>% as_tibble() %>%
   mutate(dif = pos + neg)
+
 simpleChancesummary <- simpleChance %>% group_by(album) %>% 
   summarize(Pos = mean(pos), SD_Pos = sd(pos), 
             Neg = mean(neg), SD_Neg = sd(neg),
@@ -142,6 +170,7 @@ Tyler_plot <- simpleTyler %>% ggplot(aes(x = song)) +
   theme(axis.title.x = element_blank(), axis.text.x = element_blank(),
         axis.ticks.x = element_blank(), legend.position = "none")
 
+
 simple <- bind_rows(simpleGambinosummary, simpleTylersummary, 
   simpleChancesummary, .id = "artist")
 simple$artist <- factor(simple$artist, 
@@ -175,16 +204,6 @@ simple %>% ggplot(aes(x = song)) +
   # sentiment. Can probably use this as a before-method visualization, something
   # like "Look at how big of an influence 'like' has, what happens to sentiment
   # when we remove it or remove it from certain albums"
-bing_words <- bind_rows(Chance_tokens[[1]], Chance_tokens[[2]],
-  Chance_tokens[[3]], .id = "album") %>% inner_join(bing, "word") %>%
-  count(word, sentiment, sort = TRUE)
-bing_words %>% group_by(sentiment) %>% top_n(10) %>% ungroup() %>%
-  mutate(word = reorder(word, n)) %>% ggplot(aes(word, n, fill = sentiment)) +
-    geom_col(show.legend = FALSE) + facet_wrap(~ sentiment, scales = "free_y") +
-    labs(y = "Contribution to sentiment", x = NULL) + coord_flip()
-
-
-# This code does the same as the previous block, but separates between albums
   # (might be worthwhile to change this around and use 'facet_grid()' that uses
     # sentiment AND album)
   # Shows that 'like' is very prevalent in "The Big Day", 'love' is very
@@ -203,11 +222,7 @@ bind_rows(bing_words_album_join, .id = "album") %>%
     labs(y = "Contribution to sentiment", x = NULL)
 
 
-# per album, per song, what are the most common sentiment words?
-Chance_words <- lapply(c(1:3), function(album) {
-  lapply(c(1:length(Chance_sent[[album]])), function(a) {
-    Chance_sent[[album]][[a]] %>% group_by(word) %>% summarize(n = n()) %>%
-      arrange(desc(n)) } )
-} )
+
+
 
 
