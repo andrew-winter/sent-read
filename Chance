@@ -7,9 +7,16 @@ bing_positive_sent <- function(song) {
 bing_negative_sent <- function(song) {
   song$sentiment[song$sentiment == "negative"] %>% length() *-1}
 song_length <- function(song) {song %>% bind_rows %>% nrow}
+
+line_detect <- function(lyrics, album = 1, str) {
+  lapply(c(1:length(lyrics[[album]])), function(a) {
+    filter(lyrics[[album]][[a]], str_detect(line, 
+      fixed(str, ignore_case = TRUE) )) %>% 
+    select(song_name, line)} ) %>% bind_rows
+}
+
 Intro <- 29884 ; AWG <- 150853 ; Big <- 446915
 Chance_tracks <- c(Intro, AWG, Big)
-
 
 Chance_list <- lapply(Chance_tracks, scrape_tracklist)
 Chance_lyrics <- lapply(c(1:3), function(x) { 
@@ -30,23 +37,13 @@ bind_rows(Chance_bing_counts, .id = "album") %>%
     facet_wrap(~ sentiment, scales = "free_y") + coord_flip() +
     labs(y = "Contribution to sentiment", x = NULL)
 
-# Shouldn't have to add functionality for multiple albums, as I can just use
-  # something like 
-  # lapply(c(1:2), function(x) { line_detect(Chance_lyrics, x, "search") } )
-
-line_detect <- function(x, y, z) {
-  lapply(c(1:length(x[[y]])), function(a) {
-    filter(x[[y]][[a]], str_detect(line, z)) %>% select(song_name, line)} ) %>%
-  bind_rows
-}
-
-
-lapply(c(1:3), function(y){ filter(Chance_lyrics[[3]][[y]],
-  str_detect(line, "like")) %>% select(song_name, line) } )
-
-filter(Chance_lyrics[[3]][[3]], str_detect(line, "like")) %>% select(song_name,
-  line)
-
+# Showing stuff for 'line_detect()'
+lapply(1:3, function(x) { line_detect(Chance_lyrics, x, "like") } )
+sapply(1:3, function(x) { line_detect(Chance_lyrics, x, "like") %>% nrow} )
+sapply(1:3, function(y) { Chance_tokens[[y]] %>% song_length } )
+# Acid Rap has 52 instances of "like", Coloring Book has 73 instances
+  # The Big Day has 135 instances
+  # 7776 words, 7672 words, 11710 words
 
 Chance_sent <- lapply(c(1:3), function(z) {
   lapply(Chance_tokens[[z]], inner_join, bing, "word") })
@@ -220,9 +217,3 @@ bind_rows(bing_words_album_join, .id = "album") %>%
   ggplot(aes(word, n, fill = album)) + geom_col(show.legend = FALSE) +
     facet_grid(~ sentiment, scales = "free_y") + coord_flip() +
     labs(y = "Contribution to sentiment", x = NULL)
-
-
-
-
-
-
