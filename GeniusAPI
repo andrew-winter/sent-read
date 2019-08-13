@@ -28,42 +28,7 @@ line_detect <- function(lyrics, album = 1, str) {
     select(song_name, line)} ) %>% bind_rows(.id = "song")
 }
 
-
-# scrape albums, lyrics, tokens
-gvf_albums <- lapply(c(380196, 448142), scrape_tracklist)
-gvf_lyrics <- lapply(1:2, function(album) {
-  gvf_albums[[album]]$song_lyrics_url %>% lapply(scrape_lyrics_url) } )
-gvf_tokens <- lapply(1:2, function(album) {
-  gvf_lyrics[[album]] %>% lapply(unnest_tokens, word, line) } )
-
-# Analyze stop words per song/album
-gvf_stop_words <- lapply(1:2, function(album) {
-  gvf_tokens[[album]] %>% lapply(inner_join, stop_words, "word") %>%
-    bind_rows(.id = "song") } ) %>% bind_rows(.id = "album")
-gvf_stop_words %>% group_by(word) %>% count(sort = TRUE)
-
-# Look at words that don't sort into either stop_words or sentiment words
-gvf_tokens[[2]][[1]] %>% anti_join(stop_words, "word") %>% anti_join(bing, "word")
-gvf_unsorted <- lapply(1:2, function(album) { gvf_tokens[[album]] %>% 
-                  lapply(anti_join, stop_words, "word") %>%
-                  lapply(anti_join, bing, "word") %>% 
-                    bind_rows(.id = "song")
-                  } ) %>% bind_rows(.id = "album") %>% 
-                      group_by(album, word) %>% count(sort = TRUE)
-
-# Add/remove custom stop_words and custom bing words
-gvf_custom_bing <- tribble(~word, ~sentiment,
-                           "heart", "positive")
-gvf_bing <- bind_rows(bing, gvf_custom_bing)
-gvf_custom_stop
-gvf_stop
-
-
-gvf_orig_bing <- lapply(1:2, function(x) {
-  gvf_tokens[[x]] %>% lapply(inner_join, bing, "word") } )
-
-
-simple_sent <- function(album, join, token, ...) {
+simple_sent <- function(album, token, join, ...) {
        result <- lapply(1:length(album), function(q) {
                    cbind.data.frame(album[[q]]$song_title,
                      sapply(join[[q]], bing_positive_sent),
@@ -76,9 +41,67 @@ simple_sent <- function(album, join, token, ...) {
 }
 
 
-gvf_bing_sent <- lapply(1:2, function(q) {
-  cbind.data.frame(gvf_albums[[q]]$song_title,
-    sapply(gvf_orig_join)
+
+
+
+# Greta Van Fleet case study
+  # 0) introduce
+  # 1) scrape, tokenize
+  # 2) assess common words, stop words, custom bing words (repeated step)
+    # visualize: words contribute most to sentiment, overlooked words
+  # 3) establish custom stop/bing words, set up as separate "joins" or "bings"
+  # 4) use 'simple_sent()' to compare impact of word changes
+    # visualize: difference between joins
+  # 5) draw conclusions, check different sentiments
+
+# scrape albums, lyrics, tokens
+gvf_albums <- lapply(c(380196, 448142), scrape_tracklist)
+gvf_lyrics <- lapply(1:2, function(album) {
+  gvf_albums[[album]]$song_lyrics_url %>% lapply(scrape_lyrics_url) } )
+gvf_tokens <- lapply(1:2, function(album) {
+  gvf_lyrics[[album]] %>% lapply(unnest_tokens, word, line) } )
+
+
+# Analyze stop words per song/album
+gvf_stop_words <- lapply(1:2, function(album) {
+  gvf_tokens[[album]] %>% lapply(inner_join, stop_words, "word") %>%
+    bind_rows(.id = "song") } ) %>% bind_rows(.id = "album")
+gvf_stop_words %>% group_by(word) %>% count(sort = TRUE)
+
+# Look at words that don't sort into either stop_words or sentiment words
+  # example: 'Age of Man' unsorted words
+gvf_tokens[[2]][[1]] %>% anti_join(stop_words, "word") %>% anti_join(bing, "word")
+gvf_unsorted <- lapply(1:2, function(album) { gvf_tokens[[album]] %>% 
+                  lapply(anti_join, stop_words, "word") %>%
+                  lapply(anti_join, bing, "word") %>% 
+                    bind_rows(.id = "song")
+                  } ) %>% bind_rows(.id = "album") %>% 
+                      group_by(album, word) %>% count(sort = TRUE)
+
+# Add/remove custom stop_words and custom bing words
+# With (or without) custom words, set up custom joins (or use default orig_bing)
+gvf_custom_stop <- tribble(~word, ~lexicon)
+gvf_stop <- bind_rows(stop_words, gvf_custom_stop)
+gvf_custom_words <- tribble(~word, ~sentiment, 
+                            "heart", "positive", "lovin", "positive")
+gvf_custom_bing <- bind_rows(bing, gvf_custom_words)
+
+gvf_orig_join <- lapply(1:2, function(x) {
+  gvf_tokens[[x]] %>% lapply(inner_join, bing, "word") } )
+gvf_custom_join <- lapply(1:2, function(x) {
+  gvf_tokens[[x]] %>% lapply(inner_join, gvf_custom_bing, "word") } )
+
+simple_sent(gvf_albums, gvf_tokens, gvf_orig_join)
+simple_sent(gvf_albums, gvf_tokens, gvf_custom_join)
+
+
+simple_sent(gvf_albums, gvf_tokens, gvf_orig_join)$pos -
+simple_sent(gvf_albums, gvf_tokens, gvf_custom_join)$pos
+
+
+
+
+
 
 
 
