@@ -1,10 +1,14 @@
-scrapes <- c("httr", "geniusr", "tidytext", "textdata")
+scrapes <- c("httr", "geniusr", "tidytext")
 lapply(scrapes, require, character.only = TRUE)
 baseURL <- "https://api.genius.com/search?q="
 token <- "Z12YlAUALbWknjemUTrwHSnGkbbCpbprSqoVbt7yXhjz0sDX_v3pRnNPTq8k2Ldm"
-afinn <- get_sentiments("afinn")
 bing <- get_sentiments("bing")
-loughran <- get_sentiments("loughran")
+bing_positive_sent <- function(song) {
+  song$sentiment[song$sentiment == "positive"] %>% length()}
+bing_negative_sent <- function(song) {
+  song$sentiment[song$sentiment == "negative"] %>% length() *-1}
+song_length <- function(song) {song %>% bind_rows %>% nrow}
+
 quick_albums <- function(search, artist = NULL) {
   genius_search <- search_song(search)
   genius_tibble <- lapply(genius_search$song_id, get_song_meta) %>% 
@@ -16,6 +20,72 @@ quick_albums <- function(search, artist = NULL) {
 return(list(genius_tibble, unique_ids))
 }
 # ^Rough-and-tumble 'quick_albums()' function--------------------------------
+# Well-written (I think) 'line_detect()' function----------------------------
+line_detect <- function(lyrics, album = 1, str) {
+  lapply(c(1:length(lyrics[[album]])), function(a) {
+    filter(lyrics[[album]][[a]], str_detect(line, 
+      fixed(str, ignore_case = TRUE) )) %>% 
+    select(song_name, line)} ) %>% bind_rows(.id = "song")
+}
+
+
+# scrape albums, lyrics, tokens
+gvf_albums <- lapply(c(380196, 448142), scrape_tracklist)
+gvf_lyrics <- lapply(1:2, function(album) {
+  gvf_albums[[album]]$song_lyrics_url %>% lapply(scrape_lyrics_url) } )
+gvf_tokens <- lapply(1:2, function(album) {
+  gvf_lyrics[[album]] %>% lapply(unnest_tokens, word, line) } )
+
+# Analyze stop words per song/album
+gvf_stop_words <- lapply(1:2, function(album) {
+  gvf_tokens[[album]] %>% lapply(inner_join, stop_words, "word") %>%
+    bind_rows(.id = "song") } ) %>% bind_rows(.id = "album")
+gvf_stop_words %>% group_by(word) %>% count(sort = TRUE)
+
+# Look at words that don't sort into either stop_words or sentiment words
+gvf_tokens[[2]][[1]] %>% anti_join(stop_words, "word") %>% anti_join(bing, "word")
+gvf_unsorted <- lapply(1:2, function(album) { gvf_tokens[[album]] %>% 
+                  lapply(anti_join, stop_words, "word") %>%
+                  lapply(anti_join, bing, "word") %>% 
+                    bind_rows(.id = "song")
+                  } ) %>% bind_rows(.id = "album") %>% 
+                      group_by(album, word) %>% count(sort = TRUE)
+
+# Add/remove custom stop_words and custom bing words
+gvf_custom_bing <- tribble(~word, ~sentiment,
+                           "heart", "positive")
+gvf_bing <- bind_rows(bing, gvf_custom_bing)
+gvf_custom_stop
+gvf_stop
+
+
+gvf_orig_bing <- lapply(1:2, function(x) {
+  gvf_tokens[[x]] %>% lapply(inner_join, bing, "word") } )
+
+
+simple_sent <- function(album, join, token, ...) {
+       result <- lapply(1:length(album), function(q) {
+                   cbind.data.frame(album[[q]]$song_title,
+                     sapply(join[[q]], bing_positive_sent),
+                     sapply(join[[q]], bing_negative_sent),
+                     sapply(join[[q]], song_length),
+                     sapply(token[[q]], song_length)) } ) %>%
+         bind_rows(.id = "album") %>% as_tibble()
+       names(result) = c("album", "song", "pos", "neg", "slength", "tlength")
+       return(result)
+}
+
+
+gvf_bing_sent <- lapply(1:2, function(q) {
+  cbind.data.frame(gvf_albums[[q]]$song_title,
+    sapply(gvf_orig_join)
+
+
+
+
+
+
+
 quick_sentiment <- function(...) {
   Tracklists <- lapply(list(...), scrape_tracklist)
   Lyrics <- list()
@@ -74,6 +144,10 @@ song_length <- function(song) {song %>% bind_rows %>% nrow}
 
 
 
+
+
+
+# Hamilton sent analysis, plots, etc--------------------------------------------
 Hammeta <- search_song(search_term = "Hamilton")$song_id[[1]] %>% get_song_meta()
 HamLyrics <- list()
 HamLyrics <- lapply(scrape_tracklist(Hammeta$album_id)$song_lyrics_url,  
@@ -88,7 +162,6 @@ for (song in 1:46) {
   )}
 HamSentiment <- bind_rows(HamSent)
 names(HamSentiment) <- c("song", "pos", "neg")
-
 HamSentiment$song <- factor(HamSentiment$song, 
   levels = unique(as.character(HamSentiment$song)) %>% rev)
 HamPlot <- ggplot(HamSentiment, aes(x = song)) +
@@ -101,6 +174,7 @@ HamPlot <- ggplot(HamSentiment, aes(x = song)) +
 print(HamPlot)
 
 
+# Beatles sent analysis, plots, etc---------------------------------------------
 BeatlesAlbums <- read.csv("BeatlesAlbums.csv", stringsAsFactors = FALSE) %>% 
   as_tibble()
 # Wrote ugly code to get these album_ids; easier to preserve them then the code
@@ -115,7 +189,6 @@ BeatlesTokens <- list()
 for (album in 1:13) {
   BeatlesTokens[[album]] <- lapply(BeatlesLyrics[[album]], 
     unnest_tokens, word, line)}
-
 BeatlesSentA <- list() # afinn_join()
 BeatlesSentB <- list() # inner_join(bing)
 BeatlesSentC <- list() # inner_join(afinn)
@@ -146,28 +219,22 @@ for (album in 1:13) {
   names(BeatlesSentB[[album]]) <- c("song", "pos", "neg", "wlength")
   names(BeatlesSentC[[album]]) <- c("song", "pos", "neg", "wlength")
 }
-
 B <- bind_rows(BeatlesSentB, .id = "album") %>% as_tibble()
 C <- bind_rows(BeatlesSentC, .id = "album") %>% as_tibble()
-
 A <- bind_rows(BeatlesSentA, .id = "album") %>% as_tibble()
 A <- A %>% mutate(dif = pos + neg)
 BeatlesSimple <- bind_rows(A,B,C, .id = "method")
-
 # Set to factors for ordering in ggplot
 # Duplicate songs: "Yellow Submarine" and "All You Need Is Love"
 A$song[[152]] <- "yellow submarine"
 A$song[[157]] <- "all you need is love"
 A$song <- factor(A$song, levels = unique(as.character(A$song)))
 A$album <- factor(A$album, levels = unique(as.character(A$album)))
-
 A2 <- A %>% mutate(pos2 = 
   abs( pos * (wlength-mean(wlength)/sd(wlength)) ), neg2 =
   -1 * abs( neg * (wlength-mean(wlength)/sd(wlength)) ) )
 
 A3 <- A %>% mutate(pos3 = pos/wlength, neg3 = neg/wlength)
-
-
 BeatlesPlotA <- ggplot(A, aes(x = song), linetype = 1) + 
   geom_col(aes(y = pos, fill = album), color = "black", alpha = 0.6) +
   geom_col(aes(y = neg), color = "black", alpha = 0.4) +
@@ -178,7 +245,6 @@ BeatlesPlotA <- ggplot(A, aes(x = song), linetype = 1) +
   labs(title = "Half of What I Say is Meaningless", 
        subtitle = "Sentiment Analysis of The Beatles' Lyrics",
        y = "negativity / positivity")
-
 BeatlesPlotA3 <- ggplot(A3, aes(x = song), linetype = 1) + 
   geom_col(aes(y = pos3, fill = album), color = "black", alpha = 0.6) +
   geom_col(aes(y = neg3), color = "black", alpha = 0.4) +
@@ -190,7 +256,6 @@ BeatlesPlotA3 <- ggplot(A3, aes(x = song), linetype = 1) +
        subtitle = "Sentiment Analysis of The Beatles' Lyrics",
        y = "negativity / positivity")
 print(BeatlesPlotA3)
-
 BeatlesPlotA +
   annotate(geom = "text", x = 121, y = -30, angle = 90, size = 4,
     label = "All You Need Is Love") +
@@ -198,9 +263,6 @@ BeatlesPlotA +
     label = "I Want You (She's So Heavy)") +
   annotate(geom = "text", x = 160, y = -30, angle = 90, size = 3,
     label = "George Martin's songs on Yellow Submarine")
-
-
-print(BeatlesPlotA)
 
 BeatlesLength <- ggplot(A, aes(x = album, y = wlength)) + geom_boxplot() +
   scale_x_discrete(labels = BeatlesAlbums$Title)
