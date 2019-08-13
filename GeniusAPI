@@ -27,6 +27,15 @@ line_detect <- function(lyrics, album = 1, str) {
       fixed(str, ignore_case = TRUE) )) %>% 
     select(song_name, line)} ) %>% bind_rows(.id = "song")
 }
+get_unsorted <- function(token) {
+  lapply(1:length(token), function(q) {
+    token[[q]] %>%
+      lapply(anti_join, stop_words, "word") %>%
+      lapply(anti_join, bing, "word") %>%
+        bind_rows(.id = "song")
+     } ) %>% bind_rows(.id = "album") %>%
+        group_by(word) %>% count(sort = TRUE)
+}
 
 simple_sent <- function(album, token, join, ...) {
        result <- lapply(1:length(album), function(q) {
@@ -94,13 +103,45 @@ gvf_custom_join <- lapply(1:2, function(x) {
 simple_sent(gvf_albums, gvf_tokens, gvf_orig_join)
 simple_sent(gvf_albums, gvf_tokens, gvf_custom_join)
 
-
 simple_sent(gvf_albums, gvf_tokens, gvf_orig_join)$pos -
 simple_sent(gvf_albums, gvf_tokens, gvf_custom_join)$pos
 
 
 
 
+Cole_albums <- lapply(c(11280, 499569, 115138, 309072, 420709), scrape_tracklist)
+Cole_lyrics <- lapply(1:5, function(x) { Cole_albums[[x]]$song_lyrics_url %>%
+  lapply(scrape_lyrics_url) } )
+Cole_tokens <- lapply(1:5, function(x) { Cole_lyrics[[x]] %>%
+  lapply(unnest_tokens, word, line) } )
+
+something <- lapply(1:5, function(x) {
+  Cole_tokens[[x]] %>% lapply(inner_join, bing, "word") } )
+
+
+simple_sent(Cole_albums, Cole_tokens, something)
+
+
+# old one
+line_detect <- function(lyrics, album = 1, str) {
+  lapply(c(1:length(lyrics[[album]])), function(a) {
+    filter(lyrics[[album]][[a]], str_detect(line, 
+      fixed(str, ignore_case = TRUE) )) %>% 
+    select(song_name, line)} ) %>% bind_rows(.id = "song")
+}
+
+line_detect <- function(lyrics, str) {
+  lapply(1:length(lyrics), function(album) {
+    lapply(1:length(album), function(a) {
+      filter(lyrics[[album]][[a]], 
+      str_detect(line, fixed(str, ignore_case = TRUE))) %>%
+    select(song_name, line)} ) %>% bind_rows(.id = "song")
+  } )
+}
+
+lapply(1:21, function(q) {
+filter(Cole_lyrics[[2]][[q]], str_detect(line, fixed("desp", ignore_case = TRUE)))
+})
 
 
 
