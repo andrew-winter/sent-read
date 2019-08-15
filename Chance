@@ -1,7 +1,7 @@
-# set up, signature functions
 scrapes <- c("httr", "geniusr", "tidytext")
 lapply(scrapes, require, character.only = TRUE)
 
+# set up, signature functions
 bing <- get_sentiments("bing")
 bing_positive_sent <- function(song) {
   song$sentiment[song$sentiment == "positive"] %>% length() }
@@ -47,7 +47,9 @@ simple_sent <- function(album, token, join, ...) {
                      sapply(join[[q]], bing_positive_sent),
                      sapply(join[[q]], bing_negative_sent),
                      sapply(join[[q]], song_length),
-                     sapply(token[[q]], song_length)) } ) %>%
+                     sapply(token[[q]], song_length) ) 
+                   }
+                 ) %>%
          bind_rows(.id = "album") %>% as_tibble()
        names(result) = c("album", "song", "pos", "neg", "slength", "tlength")
        return(result)
