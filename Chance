@@ -1,39 +1,43 @@
+# set up, signature functions
 scrapes <- c("httr", "geniusr", "tidytext")
 lapply(scrapes, require, character.only = TRUE)
 
-# set up, signature functions
 bing <- get_sentiments("bing")
 bing_positive_sent <- function(song) {
-  song$sentiment[song$sentiment == "positive"] %>% length() }
+  song$sentiment[song$sentiment == "positive"] %>% length()
+}
 bing_negative_sent <- function(song) {
-  song$sentiment[song$sentiment == "negative"] %>% length() *-1 }
-get_unsorted <- function(token) {
+  song$sentiment[song$sentiment == "negative"] %>% length() *-1
+}
+get_unsorted <- function(token, stop = stop_wordsB) {
   lapply(1:length(token), function(q) {
     token[[q]] %>%
-      lapply(anti_join, stop_wordsB, "word") %>%
+      lapply(anti_join, stop, "word") %>%
       lapply(anti_join, bing, "word") %>%
         bind_rows(.id = "song")
-     } ) %>% bind_rows(.id = "album") %>%
-        group_by(word) %>% count(sort = TRUE)
+  } ) %>%
+  bind_rows(.id = "album") %>%
+    group_by(word) %>% count(sort = TRUE) %>% ungroup()
 }
 line_detect <- function(lyrics, str, just_one_album = FALSE) {
   if (just_one_album == FALSE) {
     result <- lapply(1:length(lyrics), function(xalbum) {
       lapply(1:length(lyrics[[xalbum]]), function(xsong) { 
         filter(lyrics[[xalbum]][[xsong]],
-          str_detect(line, fixed(str, ignore_case = TRUE))) %>%
-            select(song_name, line) }) %>% bind_rows(.id = "track") }) %>% 
-      bind_rows(.id = "album")
+          str_detect(line, fixed(str, ignore_case = TRUE))
+        ) %>% select(song_name, line)
+      } ) %>% bind_rows(.id = "track")
+    } ) %>% bind_rows(.id = "album")
   } else {
     result <- lapply(1:length(lyrics), function(ysong) {
       filter(lyrics[[ysong]],
-        str_detect(line, fixed(str, ignore_case = TRUE))) %>%
-          select(song_name, line) }) %>% bind_rows(.id = "track")
-    }
+        str_detect(line, fixed(str, ignore_case = TRUE))
+      ) %>% select(song_name, line)
+    } ) %>% bind_rows(.id = "track")
+  }
   return(result)
 }
 plot_top_words <- function(join, number = 15) {
-  some_name <- deparse(substitute(join))
   result <- join %>% group_by(sentiment) %>% top_n(number) %>% ungroup() %>%
     mutate(word = reorder(word, n)) %>%
     ggplot(aes(word, n, fill = sentiment)) + geom_col(show.legend = FALSE) +
@@ -42,24 +46,30 @@ plot_top_words <- function(join, number = 15) {
   return(result)
 }
 simple_sent <- function(album, token, join, ...) {
-       result <- lapply(1:length(album), function(q) {
-                   cbind.data.frame(album[[q]]$song_title,
-                     sapply(join[[q]], bing_positive_sent),
-                     sapply(join[[q]], bing_negative_sent),
-                     sapply(join[[q]], song_length),
-                     sapply(token[[q]], song_length) ) 
-                   }
-                 ) %>%
-         bind_rows(.id = "album") %>% as_tibble()
-       names(result) = c("album", "song", "pos", "neg", "slength", "tlength")
-       return(result)
+  result <- lapply(1:length(album), function(q) {
+    cbind.data.frame(album[[q]]$song_title,
+      sapply(join[[q]], bing_positive_sent),
+      sapply(join[[q]], bing_negative_sent),
+      sapply(join[[q]], song_length),
+      sapply(token[[q]], song_length)
+    )
+  } ) %>% bind_rows(.id = "album") %>% as_tibble()
+  names(result) = c("album", "song", "pos", "neg", "slength", "tlength")
+  return(result)
 }
-song_length <- function(song) {song %>% bind_rows %>% nrow}
-stop_wordsB <- stop_words %>% filter(word != "good")
+song_length <- function(song) { song %>% bind_rows %>% nrow }
+stop_words_detect <- function(tokens, stop = stop_wordsB) { 
+  lapply(1:3, function(x) {
+    tokens[[x]] %>% lapply(inner_join, stop, "word") %>%
+      bind_rows()
+  } ) %>% bind_rows() %>% select(word) %>% group_by(word) %>%
+    count(sort = TRUE) %>% ungroup()
+}
 top_words <- function(join) {
   lapply(1:length(join), function(x) {
-    join[[x]] %>% bind_rows() } ) %>% bind_rows %>%
-    group_by(word, sentiment) %>% count(sort = TRUE) %>% ungroup
+    join[[x]] %>% bind_rows()
+  } ) %>%
+    bind_rows %>% group_by(word, sentiment) %>% count(sort = TRUE) %>% ungroup()
 }
 
 Chance_tracks <- c(29884, 150853, 446915)
@@ -83,13 +93,39 @@ simple_sent(Chance_albums, Chance_tokens, Chance_orig_join)
 # insert 'simple_sent()' visualization and discussion here
 # but what if we had a different bing set?
 
-# 'get_unsorted()' allows me to see what words are missing and shouldn't be
-# 'top_words()' allows me to see what words are present and shouldn't be
-  # adding stop_words to 'Chance_stop_words' is the same idea
-# The problem, though, is that I haven't looked at what's removed when using
-  # 'anti_join(stop_words, "word")'
+
+# another problem: should 'get_unsorted()' use stop_words or stop_wordsB
   # There are potentially a ton of stop_words that aren't correct
     # ex: "good" is a stop_word for no reason at all
+# I think I'd have to remove it from stop_words AND add it to custom_words
+# Story note: I saw "kind" in stop_words, removed it, thought about it, then
+  # used 'line_detect()' to see how it's used. Turns out, 2/3 of the instances
+  # are "kinda" or "kind of x", 1/6 is "one of a kind", and only one is "kind"
+  # like generous
+
+# 0. basic sentiment analysis (probably with stop_words), then 'top_words()'
+# 1. use 'stop_words_detect()'
+  # ensure that stop_words aren't stopping anything they shouldn't (ex. "good")
+  # assess via 'line_detect()', make custom stop_words via 'anti_join()'
+  # commentary: "Look which words were stopped! Decreased sentiment!"
+stop_words_rm <- tribble(~word, "good", "great", "better", "greatest",
+  "together", "please", "best")
+stop_wordsB <- anti_join(stop_words, stop_words_rm, "word")
+
+# 2. use 'get_unsorted()'
+  # determine if any words should have sentiment or should be stopped
+  # commentary: "look at all the words that aren't in the bing dataset!"
+Chance_custom_words <- tribble(~word, ~sentiment,
+                       "kisses", "positive",
+                       "special", "positive")
+Chance_lexicon <- bind_rows(bing, Chance_custom_words)
+
+# 3. make join (?)
+# 4. use 'top_words()' and 'line_detect()'
+  # commentary: "look at all the words that were incorrectly (for our purposes)
+    # in the bing dataset!"
+# jam, and miss, maybe
+
 
 Chance_tokens %>% get_unsorted
 line_detect(Chance_lyrics, "juice")
@@ -105,11 +141,19 @@ line_detect(Chance_lyrics, "problem")
 line_detect(Chance_lyrics, "miss")
 
 
-Chance_custom_words <- tribble(~word, ~sentiment,
-                       "juice", "positive",
-                       "kisses", "positive",
-                       "special", "positive")
-Chance_lexicon <- bind_rows(bing, Chance_custom_words)
+
+
+
+# important to remember: stop_words_rm might have some words that aren't
+  # bing words-- they were correctly removed from stop_words, but not
+  # necesssarily added to the lexicon
+# NOTE: can't simply add stop_words_rm to Chance_lexicon, because if there
+  # are two instances of the same word, it'll be double counted
+# Have got to think of a more efficient way to undertake the fix steps
+# Going to be a mission regardless
+
+
+
 
 Chance_custom_stops <- tribble(~word, ~lexicon,
                                "like", "custom")
@@ -138,8 +182,8 @@ custom %>% ggplot(aes(x = song)) +
 orig$song <- factor(orig$song, levels = unique(as.character(orig$song)))
 orig$album <- factor(orig$album, levels = unique(as.character(orig$album)))
 orig %>% ggplot(aes(x = song)) + 
-  geom_col(aes(y = pos, fill = album), linetype = 1, alpha = 0.8) +
-  geom_col(aes(y = neg), linetype = 1, alpha = 0.6)
+  geom_col(aes(y = posi, fill = album), linetype = 1, alpha = 0.8) +
+  geom_col(aes(y = negi), linetype = 1, alpha = 0.6)
 
 
 
@@ -158,6 +202,9 @@ Gambino_lyrics <- lapply(c(1:3), function(x) {
   Gambino_albums[[x]]$song_lyrics_url %>% lapply(scrape_lyrics_url)})
 Gambino_tokens <- lapply(c(1:3), function(y) { 
   Gambino_lyrics[[y]] %>% lapply(unnest_tokens, word, line) })
+
+Gambino_orig_join <- lapply(1:3, function(x) {
+  Gambino_tokens[[x]] %>% lapply(inner_join, bing, "word") } )
 
 
 Tyler_tracks <- c(10761, 10762, 18842, 352640, 526062)
@@ -185,27 +232,3 @@ plot_top_album_words <- function(join, number = 10) {
       facet_wrap(album ~ sentiment, scales = "free_y") + coord_flip() +
       labs(y = "Contribution to sentiment", x = NULL)
 }
-
-simple <- bind_rows(simpleGambinosummary, simpleTylersummary, 
-                    simpleChancesummary, .id = "artist")
-simple$artist <- factor(simple$artist, 
-                        levels = unique(as.character(simple$artist)))
-levels(simple$artist) <- c("Gambino", "Tyler", "Chance")
-simple %>% ggplot(aes(x = album)) + 
-  geom_col(aes(y = Pos, fill = artist), color = "black", alpha = 0.8) + 
-  geom_col(aes(y = Neg), color = "black", alpha = 0.4) +
-  facet_grid(~artist) + theme(legend.position = "none")
-
-simple <- lapply(list(Gambino_counts, Tyler_counts, Chance_counts), 
-                 bind_rows, .id = "album") %>% bind_rows(.id = "artist") %>% 
-                 as_tibble() %>%
-  mutate(dif = pos + neg)
-simple$artist <- factor(simple$artist, 
-                        levels = unique(as.character(simple$artist)))
-levels(simple$artist) <- c("Gambino", "Tyler", "Chance")
-simple %>% ggplot(aes(x = song)) + 
-  geom_col(aes(y = pos, fill = artist), color = "black", alpha = 0.8) + 
-  geom_col(aes(y = neg), color = "black", alpha = 0.4) +
-  facet_grid(~artist) + theme(legend.position = "none", 
-                              axis.title.x = element_blank(), 
-axis.text.x = element_blank(), axis.ticks.x = element_blank())
