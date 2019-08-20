@@ -10,7 +10,7 @@ bing_negative_sent <- function(song) {
   song$sentiment[song$sentiment == "negative"] %>% length() *-1
 }
 get_unsorted <- function(token, stop = stop_wordsB) {
-  lapply(1:length(token), function(q) {
+  lapply(seq_along(token), function(q) {
     token[[q]] %>%
       lapply(anti_join, stop, "word") %>%
       lapply(anti_join, bing, "word") %>%
@@ -21,15 +21,15 @@ get_unsorted <- function(token, stop = stop_wordsB) {
 }
 line_detect <- function(lyrics, str, just_one_album = FALSE) {
   if (just_one_album == FALSE) {
-    result <- lapply(1:length(lyrics), function(xalbum) {
-      lapply(1:length(lyrics[[xalbum]]), function(xsong) { 
+    result <- lapply(seq_along(lyrics), function(xalbum) {
+      lapply(seq_along(lyrics[[xalbum]]), function(xsong) { 
         filter(lyrics[[xalbum]][[xsong]],
           str_detect(line, fixed(str, ignore_case = TRUE))
         ) %>% select(song_name, line)
       } ) %>% bind_rows(.id = "track")
     } ) %>% bind_rows(.id = "album")
   } else {
-    result <- lapply(1:length(lyrics), function(ysong) {
+    result <- lapply(seq_along(lyrics), function(ysong) {
       filter(lyrics[[ysong]],
         str_detect(line, fixed(str, ignore_case = TRUE))
       ) %>% select(song_name, line)
@@ -46,7 +46,7 @@ plot_top_words <- function(join, number = 15) {
   return(result)
 }
 simple_sent <- function(album, token, join, ...) {
-  result <- lapply(1:length(album), function(q) {
+  result <- lapply(seq_along(album), function(q) {
     cbind.data.frame(album[[q]]$song_title,
       sapply(join[[q]], bing_positive_sent),
       sapply(join[[q]], bing_negative_sent),
@@ -58,7 +58,7 @@ simple_sent <- function(album, token, join, ...) {
   return(result)
 }
 song_length <- function(song) { song %>% bind_rows %>% nrow }
-stop_words_detect <- function(tokens, stop = stop_wordsB) { 
+stop_words_detect <- function(tokens, stop = stop_words) { 
   lapply(1:3, function(x) {
     tokens[[x]] %>% lapply(inner_join, stop, "word") %>%
       bind_rows()
@@ -66,7 +66,7 @@ stop_words_detect <- function(tokens, stop = stop_wordsB) {
     count(sort = TRUE) %>% ungroup()
 }
 top_words <- function(join) {
-  lapply(1:length(join), function(x) {
+  lapply(seq_along(join), function(x) {
     join[[x]] %>% bind_rows()
   } ) %>%
     bind_rows %>% group_by(word, sentiment) %>% count(sort = TRUE) %>% ungroup()
@@ -78,13 +78,20 @@ token <- "Z12YlAUALbWknjemUTrwHSnGkbbCpbprSqoVbt7yXhjz0sDX_v3pRnNPTq8k2Ldm"
 
 # scrape albums and lyrics, tokenize 
 Chance_albums <- lapply(Chance_tracks, scrape_tracklist)
-Chance_lyrics <- lapply(c(1:3), function(x) { 
+Chance_lyrics <- lapply(1:3, function(x) { 
   Chance_albums[[x]]$song_lyrics_url %>% lapply(scrape_lyrics_url) } )
-Chance_tokens <- lapply(c(1:3), function(y) { 
+Chance_tokens <- lapply(1:3, function(y) { 
   Chance_lyrics[[y]] %>% lapply(unnest_tokens, word, line) } )
 
 Chance_orig_join <- lapply(1:3, function(x) {
-  Chance_tokens[[x]] %>% lapply(inner_join, bing, "word") } )
+  Chance_tokens[[x]] %>% lapply(anti_join, stop_words, "word") %>%
+    lapply(inner_join, bing, "word") } )
+
+
+a <- Chance_orig_join %>% top_words()
+b <- Chance_post %>% top_words()
+anti_join(a, b, "word")
+
 
 Chance_orig_join %>% top_words()
 Chance_orig_join %>% top_words() %>% plot_top_words()
@@ -111,8 +118,21 @@ simple_sent(Chance_albums, Chance_tokens, Chance_orig_join)
 stop_words_rm <- tribble(~word, "good", "great", "better", "greatest",
   "together", "please", "best")
 stop_wordsB <- anti_join(stop_words, stop_words_rm, "word")
+  # similarly, think of words that aren't stopped but should be
+  # should probably use 'top_words()' here for the first time
+Chance_custom_stops <- tribble(~word, ~lexicon,
+                               "like", "custom")
+Chance_stop_words <- bind_rows(stop_wordsB, Chance_custom_stops)
+# maaaaybe save these steps for top_words and line detect when we'd naturally
+  # investigate unclear words like "like"
+# Could do that, but alternative is "let's look at our first visualization!
 
 # 2. use 'get_unsorted()'
+  # doing this step after adding stop_words ensures we don't forget sig words
+  # and that we don't double-count, either
+  # something like "Since we just removed some stop words, and later in the 
+    # process we have to see if any joined words are wrong, right now is
+    # a good time to sort through "unsorted words"
   # determine if any words should have sentiment or should be stopped
   # commentary: "look at all the words that aren't in the bing dataset!"
 Chance_custom_words <- tribble(~word, ~sentiment,
@@ -155,9 +175,7 @@ line_detect(Chance_lyrics, "miss")
 
 
 
-Chance_custom_stops <- tribble(~word, ~lexicon,
-                               "like", "custom")
-Chance_stop_words <- bind_rows(stop_wordsB, Chance_custom_stops)
+
 
 Chance_custom_join <- lapply(1:3, function(x) {
   Chance_tokens[[x]] %>% lapply(anti_join, Chance_stop_words, "word") %>%
