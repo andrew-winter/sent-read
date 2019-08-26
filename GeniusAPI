@@ -64,6 +64,54 @@ simple_sent <- function(album, token, join, ...) {
 }
 
 
+# tf-idf practice
+# should tf-idf be done per album or per song? I'm thinking per song
+# maybe there's not enough words per song to have this even make sense
+# After looking at the fact that there's only three possible (should be four)
+  # inverse document frequency values, think I will calculate per song
+  # Another reason: Juice is ranked as the highest tf_idf, which in principle is
+    # pretty weird. "Juice" is labelled as a particularly impactful word
+    # because it has relatively high term frequency and a relatively high
+    # inverse document frequency.
+# "Juice" is impactful because it's a relatively high percentage of the words in 
+  # "Acid Rap" and relatively infrequent in Chance's projects as a whole (in 1/3).
+# Perhaps a better measure would be words that are in a relatively high 
+  # percentage of a certain song, but relativelly infrequent in Chance's SONGS
+  # as a whole.
+
+
+library(janeaustenr)
+
+freq_words <- austen_books() %>% unnest_tokens(word, text) %>%
+  count(book, word, sort = TRUE)
+# unnest_tokens(tbl, output, input, ...)
+# unnest 'austen_books()' text by word, then count frequency of words per book
+# Chance_tokens is assumed
+
+
+Chance_counts <- lapply(1:3, function(x) {
+  Chance_tokens[[x]] %>% bind_rows(.id = "song")
+  } ) %>%
+    bind_rows(.id = "album") %>% mutate(track = paste0(album, "-", song)) 
+Chance_freq <- Chance_counts %>% count(album, word, sort = TRUE)
+Chance_freq <- Chance_freq %>% 
+  mutate(album = replace(album, album == "1", "Acid Rap")) %>% 
+  mutate(album = replace(album, album == "2", "Coloring Book")) %>% 
+  mutate(album = replace(album, album == "3", "The Big Day"))
+Chance_total_counts <- Chance_freq %>% group_by(album) %>%
+  summarize(total = sum(n))
+
+Chance_freq <- left_join(Chance_freq, Chance_total_counts)
+
+Chance_freq_rank <- Chance_freq %>% group_by(album) %>%
+  mutate(rank = row_number(), term_freq = n/total)
+
+Chance_freq_rank %>% ggplot(aes(rank, term_freq, color = album)) + 
+  geom_line(size = 1.1, alpha = 0.8, show.legend = FALSE) + 
+  scale_x_log10() +
+  scale_y_log10()
+
+Chance_freq %>% bind_tf_idf(word, album, n)
 
 
 
