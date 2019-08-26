@@ -102,7 +102,6 @@ Chance_total_counts <- Chance_freq %>% group_by(album) %>%
   summarize(total = sum(n))
 
 Chance_freq <- left_join(Chance_freq, Chance_total_counts)
-
 Chance_freq_rank <- Chance_freq %>% group_by(album) %>%
   mutate(rank = row_number(), term_freq = n/total)
 
@@ -111,7 +110,17 @@ Chance_freq_rank %>% ggplot(aes(rank, term_freq, color = album)) +
   scale_x_log10() +
   scale_y_log10()
 
-Chance_freq %>% bind_tf_idf(word, album, n)
+Chance_freq %>% bind_tf_idf(word, album, n) %>% arrange(desc(tf_idf))
+
+Chance_freq_songs <- Chance_counts %>% select(track, song_name, word) %>%
+  count(song_name, word, sort = TRUE)
+Chance_song_counts <- Chance_freq_songs %>% group_by(song_name) %>% 
+  summarize(total = sum(n))
+Chance_freq_join <- left_join(Chance_freq_songs, Chance_song_counts, "song_name")
+Chance_freq_song_rank <- Chance_freq_join %>% group_by(song_name) %>%
+  mutate(rank = row_number(), term_freq = n/total)
+
+Chance_freq_join %>% bind_tf_idf(word, song_name, n) %>% arrange(desc(tf_idf))
 
 
 
