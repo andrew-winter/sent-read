@@ -134,7 +134,10 @@ anti_join(b, a, "word")
 
 
 
-
+brk_ids <- c(343250, 349160, 367722, 458278, 541256)
+brk_albums <- lapply(brk_albums, scrape_tracklist)
+brk_lyrics <- lapply(1:5, function(x) {
+  brk_albums[[x]]$song_lyrics_url %>% scrape_lyrics_url } )
 
 # Greta Van Fleet case study
   # 0) introduce
