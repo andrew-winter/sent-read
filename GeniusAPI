@@ -133,11 +133,18 @@ anti_join(a, b, "word")
 anti_join(b, a, "word")
 
 
-
-brk_ids <- c(343250, 349160, 367722, 458278, 541256)
+brk_ids <- c(148692, 343250, 349160, 367722, 458278, 541256)
+nineties <- c("1997-DIANA", "1998-TRUMAN", "1999-WILDFIRE")
+nineties_lyrics <- lapply(paste0("https://genius.com/Brockhampton-", 
+  nineties, "-lyrics"), scrape_lyrics_url)
 brk_albums <- lapply(brk_ids, scrape_tracklist)
-brk_lyrics <- lapply(1:5, function(x) {
+brk_lyrics <- lapply(seq_along(brk_albums), function(x) {
   brk_albums[[x]]$song_lyrics_url %>% lapply(scrape_lyrics_url) } )
+brk_lyrics[[7]] <- brk_lyrics[[6]]
+brk_lyrics[[6]] <- brk_lyrics[[5]]
+brk_lyrics[[5]] <- nineties_lyrics
+brk_tokens <- lapply(1:7, function(x) {
+  brk_lyrics[[x]] %>% lapply(unnest_tokens, word, line) } )
 
 # Greta Van Fleet case study
   # 0) introduce
