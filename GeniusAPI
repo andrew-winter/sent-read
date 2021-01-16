@@ -1,7 +1,7 @@
 scrapes <- c("httr", "geniusr", "tidytext")
 lapply(scrapes, require, character.only = TRUE)
 baseURL <- "https://api.genius.com/search?q="
-token <- "Z12YlAUALbWknjemUTrwHSnGkbbCpbprSqoVbt7yXhjz0sDX_v3pRnNPTq8k2Ldm"
+token <- GENIUS_TOKEN # Stored in Renviron file
 bing <- get_sentiments("bing")
 bing_positive_sent <- function(song) {
   song$sentiment[song$sentiment == "positive"] %>% length()}
